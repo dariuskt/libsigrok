@@ -1750,6 +1750,8 @@ SR_PRIV int ser_name_is_hid(struct sr_serial_dev_inst *serial);
 extern SR_PRIV struct ser_lib_functions *ser_lib_funcs_hid;
 SR_PRIV int ser_name_is_bt(struct sr_serial_dev_inst *serial);
 extern SR_PRIV struct ser_lib_functions *ser_lib_funcs_bt;
+SR_PRIV int ser_name_is_tcp(struct sr_serial_dev_inst *serial);
+extern SR_PRIV struct ser_lib_functions *ser_lib_funcs_tcp;
 
 #ifdef HAVE_LIBHIDAPI
 struct vid_pid_item {
