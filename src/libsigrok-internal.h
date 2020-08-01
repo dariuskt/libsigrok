@@ -1266,6 +1266,12 @@ struct sr_serial_dev_inst {
 	GString *rcv_buffer;
 	serial_rx_chunk_callback rx_chunk_cb_func;
 	void *rx_chunk_cb_data;
+	char *tcp_address;
+	char *tcp_port;
+	int tcp_socket;
+	int tcp_length_bytes_read;
+	int tcp_response_length;
+	int tcp_response_bytes_read;
 #ifdef HAVE_LIBSERIALPORT
 	/** libserialport port handle */
 	struct sp_port *sp_data;
