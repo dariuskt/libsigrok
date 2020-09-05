@@ -212,7 +212,7 @@ static int sr_ser_tcp_write(struct sr_serial_dev_inst *serial,
 	const void *buf, size_t count,
 	int nonblocking, unsigned int timeout_ms)
 {
-sr_err("== TCP WRITE");
+sr_err("== TCP WRITE nonblocking:%d timeout:%d", nonblocking, timeout_ms);
 
 	int ret;
 
@@ -231,12 +231,12 @@ sr_err("== TCP WRITE");
 		return SR_ERR;
 	}
 
-	if (ret < count) {
-		sr_dbg("Only sent %d/%d bytes of command: '%s'."
-			, ret, count, buf);
+	if (ret < (int)count) {
+		sr_dbg("Only sent %d/%d bytes."
+			, ret, (int)count);
 	}
 
-	sr_spew("Successfully sent command: '%s'.", buf);
+	sr_spew("Successfully sent command: '%p'.", buf);
 
 	return ret;
 }
@@ -245,17 +245,36 @@ static int sr_ser_tcp_read(struct sr_serial_dev_inst *serial,
 	void *buf, size_t count,
 	int nonblocking, unsigned int timeout_ms)
 {
-sr_err("== TCP READ");
+sr_err("== TCP READ nonblocking:%d", nonblocking);
 
 	int len;
 
 	(void)nonblocking;
-	(void)timeout_ms;
 
 	if (serial->tcp_socket < 0) {
 		sr_dbg("Cannot read from unopened port %s.", serial->port);
 		return SR_ERR;
 	}
+
+
+
+	fd_set read_fd_set;
+	FD_ZERO(&read_fd_set);
+	FD_SET((unsigned int)serial->tcp_socket, &read_fd_set);
+
+	/* Initialize the timeout data structure. */
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = timeout_ms*1000*4;
+
+	select(serial->tcp_socket + 1, &read_fd_set, NULL, NULL, &timeout);
+
+	if (!(FD_ISSET(serial->tcp_socket, &read_fd_set))) {
+		sr_err("== TCP READ timeout:%dms", timeout_ms);
+		return 0;
+	}
+
+
 
 	len = recv(serial->tcp_socket, buf, count, 0);
 
@@ -265,28 +284,10 @@ sr_err("== TCP READ");
 	}
 
 	serial->tcp_length_bytes_read = LENGTH_BYTES;
-	serial->tcp_response_length = len < count ? len : count + 1;
+	serial->tcp_response_length = len < (int)count ? len : (int)count + 1;
 	serial->tcp_response_bytes_read = len;
 
 	return len;
-}
-
-static int sr_ser_tcp_set_params(struct sr_serial_dev_inst *serial,
-	int baudrate, int bits, int parity, int stopbits,
-	int flowcontrol, int rts, int dtr)
-{
-sr_err("== TCP SET PARAMS");
-
-	(void)serial;
-	(void)baudrate;
-	(void)bits;
-	(void)parity;
-	(void)stopbits;
-	(void)flowcontrol;
-	(void)rts;
-	(void)dtr;
-
-	return SR_OK;
 }
 
 #ifdef G_OS_WIN32
@@ -299,6 +300,8 @@ static int sr_ser_tcp_source_add_int(struct sr_serial_dev_inst *serial,
 	int events,
 	void **keyptr, gintptr *fdptr, unsigned int *pollevtptr)
 {
+sr_err("== TCP source add init");
+
 	struct sp_event_set *event_set;
 	gintptr poll_fd;
 	unsigned int poll_events;
@@ -365,6 +368,8 @@ static int sr_ser_tcp_source_add(struct sr_session *session,
 	struct sr_serial_dev_inst *serial, int events, int timeout,
 	sr_receive_data_callback cb, void *cb_data)
 {
+sr_err("== TCP source add");
+
 	int ret;
 	void *key;
 	gintptr poll_fd;
@@ -383,6 +388,8 @@ static int sr_ser_tcp_source_add(struct sr_session *session,
 static int sr_ser_tcp_source_remove(struct sr_session *session,
 	struct sr_serial_dev_inst *serial)
 {
+sr_err("== TCP source remove");
+
 	void *key;
 
 	key = serial->sp_data;
@@ -391,6 +398,8 @@ static int sr_ser_tcp_source_remove(struct sr_session *session,
 
 static GSList *sr_ser_tcp_list(GSList *list, sr_ser_list_append_t append)
 {
+sr_err("== TCP LIST");
+
 	struct sp_port **ports;
 	size_t i;
 	const char *name;
@@ -410,53 +419,10 @@ static GSList *sr_ser_tcp_list(GSList *list, sr_ser_list_append_t append)
 	return list;
 }
 
-static int sr_ser_tcp_get_frame_format(struct sr_serial_dev_inst *serial,
-	int *baud, int *bits)
-{
-	struct sp_port_config *config;
-	int ret, tmp;
-	enum sp_parity parity;
-
-	if (sp_new_config(&config) < 0)
-		return SR_ERR_MALLOC;
-	*baud = *bits = 0;
-	ret = SR_OK;
-	do {
-		if (sp_get_config(serial->sp_data, config) < 0) {
-			ret = SR_ERR_NA;
-			break;
-		}
-
-		if (sp_get_config_baudrate(config, &tmp) < 0) {
-			ret = SR_ERR_NA;
-			break;
-		}
-		*baud = tmp;
-
-		*bits += 1;	/* Start bit. */
-		if (sp_get_config_bits(config, &tmp) < 0) {
-			ret = SR_ERR_NA;
-			break;
-		}
-		*bits += tmp;
-		if (sp_get_config_parity(config, &parity) < 0) {
-			ret = SR_ERR_NA;
-			break;
-		}
-		*bits += (parity != SP_PARITY_NONE) ? 1 : 0;
-		if (sp_get_config_stopbits(config, &tmp) < 0) {
-			ret = SR_ERR_NA;
-			break;
-		}
-		*bits += tmp;
-	} while (FALSE);
-	sp_free_config(config);
-
-	return ret;
-}
-
 static size_t sr_ser_tcp_get_rx_avail(struct sr_serial_dev_inst *serial)
 {
+sr_err("== TCP rx avail");
+
 	int rc;
 
 	if (!serial)
@@ -476,12 +442,12 @@ static struct ser_lib_functions ser_tcp = {
 	.drain = sr_ser_tcp_drain,
 	.write = sr_ser_tcp_write,
 	.read = sr_ser_tcp_read,
-	.set_params = sr_ser_tcp_set_params,
+	.set_params = std_dummy_set_params,
 	.setup_source_add = sr_ser_tcp_source_add,
 	.setup_source_remove = sr_ser_tcp_source_remove,
 	.list = sr_ser_tcp_list,
-//	.get_frame_format = sr_ser_tcp_get_frame_format,
-//	.get_rx_avail = sr_ser_tcp_get_rx_avail,
+	.get_frame_format = NULL,
+	.get_rx_avail = sr_ser_tcp_get_rx_avail,
 };
 SR_PRIV struct ser_lib_functions *ser_lib_funcs_tcp = &ser_tcp;
 
